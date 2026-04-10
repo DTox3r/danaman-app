@@ -21,7 +21,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
   final SharedPreferences prefs = await SharedPreferences.getInstance();
-  runApp(JodedormanApp(prefs: prefs)); // Nombre interno ASCII
+  runApp(JodedormanApp(prefs: prefs));
 }
 
 class JodedormanApp extends StatefulWidget {
@@ -34,10 +34,11 @@ class JodedormanApp extends StatefulWidget {
 class _JodedormanAppState extends State<JodedormanApp> {
   ThemeMode _themeMode = ThemeMode.system;
   void toggleTheme() => setState(() => _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light);
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Dañaman', // Aquí sí podemos usar la Ñ porque es un String
+      title: 'Jodedorman',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.orange, brightness: Brightness.light),
       darkTheme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.orange, brightness: Brightness.dark),
@@ -58,15 +59,18 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   List<String> historial = [];
+  
   @override
   void initState() {
     super.initState();
     historial = widget.prefs.getStringList('historial_v4_2_5') ?? [];
   }
+  
   void _updateHistorial(List<String> nuevo) {
     setState(() => historial = nuevo);
     widget.prefs.setStringList('historial_v4_2_5', nuevo);
   }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -140,6 +144,24 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) { return 0.0; }
   }
 
+  DateTime? _parsearFechaBCV(String textoFecha) {
+    final meses = {
+      'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+      'julio': 7, 'agosto': 8, 'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+    };
+    try {
+      RegExp regExp = RegExp(r'(\d{1,2})\s+(?:de\s+)?([a-z]+)\s+(?:de\s+)?(\d{4})', caseSensitive: false);
+      var match = regExp.firstMatch(textoFecha.toLowerCase());
+      if (match != null) {
+        int dia = int.parse(match.group(1)!);
+        int mes = meses[match.group(2)!] ?? 0;
+        int anio = int.parse(match.group(3)!);
+        if (mes != 0) return DateTime(anio, mes, dia);
+      }
+    } catch (e) { return null; }
+    return null;
+  }
+
   Future<void> actualizarDatos() async {
     if (!mounted || !canRefresh) return;
     setState(() { isLoading = true; canRefresh = false; });
@@ -159,17 +181,18 @@ class _HomeScreenState extends State<HomeScreen> {
           double eurWeb = double.parse(eurT.replaceAll(',', '.'));
           
           DateTime ahora = DateTime.now();
-          String hoyStr = DateFormat('dd/MM/yyyy').format(ahora);
-          bool esFechaCorrecta = fechaT.contains(ahora.day.toString()) || fechaT.contains(ahora.day.toString().padLeft(2, '0'));
+          DateTime hoy = DateTime(ahora.year, ahora.month, ahora.day);
+          
+          DateTime? fechaBCV = _parsearFechaBCV(fechaT);
           
           if (usdWeb > 20.0) {
-            if (!esFechaCorrecta) {
+            if (fechaBCV != null && fechaBCV.isAfter(hoy)) {
               esTasaFutura = true;
-              double backupDolar = _buscarUltimoValido("BCV Dolar", hoyStr);
+              double backupDolar = _buscarUltimoValido("BCV Dolar", "");
               bcvDolar = (backupDolar > 0) ? backupDolar : usdWeb;
-              double backupEuro = _buscarUltimoValido("BCV Euro", hoyStr);
+              double backupEuro = _buscarUltimoValido("BCV Euro", "");
               bcvEuro = (backupEuro > 0) ? backupEuro : eurWeb;
-              infoTasa = "Tasas BCV de $hoyStr vigentes";
+              infoTasa = "Tasa adelantada. Usando respaldo vigente.";
             } else { 
               bcvDolar = usdWeb; 
               bcvEuro = eurWeb; 
@@ -197,9 +220,25 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final res = await http.post(Uri.parse('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({"asset": "USDT", "fiat": "VES", "tradeType": type, "rows": 1, "page": 1, "publisherType": "merchant"}),
+        body: jsonEncode({"asset": "USDT", "fiat": "VES", "tradeType": type, "rows": 6, "page": 1, "publisherType": "merchant"}),
       );
-      return double.parse(jsonDecode(res.body)['data'][0]['adv']['price'].toString());
+      
+      var datos = jsonDecode(res.body)['data'] as List;
+      
+      if (datos.length > 1) {
+        double suma = 0.0;
+        int comerciantesTomados = 0;
+        
+        for (int i = 1; i < datos.length && comerciantesTomados < 4; i++) {
+          suma += double.parse(datos[i]['adv']['price'].toString());
+          comerciantesTomados++;
+        }
+        
+        return suma / comerciantesTomados;
+      } else if (datos.isNotEmpty) {
+        return double.parse(datos[0]['adv']['price'].toString());
+      }
+      return 0.0;
     } catch (e) { return 0.0; }
   }
 
@@ -214,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
     double t = (monedaSeleccionada.contains("USD")) ? bcvDolar : (monedaSeleccionada.contains("EUR")) ? bcvEuro : (monedaSeleccionada.contains("COMPRA")) ? binanceCompra : binanceVenta;
     String f = DateFormat('dd/MM/yyyy').format(DateTime.now());
     String h = DateFormat('hh:mm a').format(DateTime.now());
-    return "📊 *Dañaman - Reporte*\n📅 $f | $h\n🔹 *Monto:* ${_controller.text} ${modoCompra ? moneda : 'Bs'}\n🔹 *Tasa:* ${t.toStringAsFixed(2)} ($monedaSeleccionada)\n✅ *Total: ${resultado.toStringAsFixed(2)} ${modoCompra ? 'Bs' : moneda}*\n---";
+    return "📊 *Jodedorman - Reporte*\n📅 $f | $h\n🔹 *Monto:* ${_controller.text} ${modoCompra ? moneda : 'Bs'}\n🔹 *Tasa:* ${t.toStringAsFixed(2)} ($monedaSeleccionada)\n✅ *Total: ${resultado.toStringAsFixed(2)} ${modoCompra ? 'Bs' : moneda}*\n---";
   }
 
   @override
@@ -222,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color txtCol = isDark ? Colors.white : Colors.black;
     return Scaffold(
-      appBar: AppBar(title: const Text("Dañaman v4.5.8 Pro"), actions: [
+      appBar: AppBar(title: const Text("Jodedorman v4.5.8 Pro"), actions: [
         IconButton(icon: const Icon(Icons.brightness_6), onPressed: widget.onThemeToggle),
         IconButton(icon: Icon(Icons.refresh, color: canRefresh ? null : Colors.grey), onPressed: canRefresh ? actualizarDatos : null),
       ]),
@@ -324,10 +363,11 @@ class _HomeScreenState extends State<HomeScreen> {
 class HistoryScreen extends StatelessWidget {
   final List<String> historial;
   const HistoryScreen({super.key, required this.historial});
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Historial Dañaman"), actions: [
+      appBar: AppBar(title: const Text("Historial Jodedorman"), actions: [
         IconButton(icon: const Icon(Icons.file_download), onPressed: () => _exportarCSV(historial)),
       ]),
       body: historial.isEmpty ? const Center(child: Text("Sin registros")) : ListView(
@@ -336,6 +376,7 @@ class HistoryScreen extends StatelessWidget {
       ),
     );
   }
+  
   Widget _buildFolder(String cat, Color col) {
     List<String> filtrado = historial.where((e) => e.startsWith(cat)).toList();
     double min = 0.0, max = 0.0;
@@ -352,12 +393,14 @@ class HistoryScreen extends StatelessWidget {
       ),
     );
   }
+  
   Widget _extremoText(String l, double v, Color c) => Column(children: [Text(l, style: TextStyle(fontSize: 9, color: c)), Text(v.toStringAsFixed(2), style: TextStyle(fontSize: 16, color: c))]);
+  
   Future<void> _exportarCSV(List<String> h) async {
     String csv = "Indicador,Tasa,Fecha,Hora\n" + h.map((e) => e.replaceAll('|', ',')).join('\n');
     final dir = await getTemporaryDirectory();
     final file = File("${dir.path}/historial_tasas.csv");
     await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path)], text: 'Exportación Dañaman');
+    await Share.shareXFiles([XFile(file.path)], text: 'Exportación Jodedorman');
   }
 }
