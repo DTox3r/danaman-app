@@ -91,7 +91,7 @@ class ApiService {
                 bcvDolar = (backupDolar > 0) ? backupDolar : usdWeb;
                 bcvEuro = (backupEuro > 0) ? backupEuro : eurWeb;
                 infoTasa = "Tasa anterior vigente en curso";
-                futureTasaInfo = "¡Atención! Nueva tasa para $fechaT: ${usdWeb.toStringAsFixed(2)}";
+                futureTasaInfo = "¡Atención! Nuevas tasas para $fechaT\nUSD: ${usdWeb.toStringAsFixed(2)} | EUR: ${eurWeb.toStringAsFixed(2)}";
               } else {
                 bcvDolar = usdWeb; 
                 bcvEuro = eurWeb; 

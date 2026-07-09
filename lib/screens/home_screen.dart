@@ -95,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     String f = DateFormat('dd/MM/yyyy').format(DateTime.now());
     String h = DateFormat('hh:mm a').format(DateTime.now());
-    return "📊 *Dañaman - Reporte*\n📅 $f | $h\n🔹 *Monto:* ${_currencyFormat.format(double.tryParse(_controller.text.replaceAll(',', '.')) ?? 0.0)} ${modoCompra ? moneda : 'Bs'}\n🔹 *Tasa:* ${_currencyFormat.format(t)} ($monedaSeleccionada)\n✅ *Total: ${_currencyFormat.format(resultado)} ${modoCompra ? 'Bs' : moneda}*\n---";
+    return "📊 *Convertidor Pro - Reporte*\n📅 $f | $h\n🔹 *Monto:* ${_currencyFormat.format(double.tryParse(_controller.text.replaceAll(',', '.')) ?? 0.0)} ${modoCompra ? moneda : 'Bs'}\n🔹 *Tasa:* ${_currencyFormat.format(t)} ($monedaSeleccionada)\n✅ *Total: ${_currencyFormat.format(resultado)} ${modoCompra ? 'Bs' : moneda}*\n---";
   }
 
   @override
