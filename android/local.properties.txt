@@ -1,0 +1,5 @@
+flutter.sdk=/home/drubio/flutter
+sdk.dir=/home/drubio/Android/Sdk
+flutter.buildMode=release
+flutter.versionName=4.6.0
+flutter.versionCode=2
