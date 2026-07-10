@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import 'home_screen.dart';
 import 'history_screen.dart';
+import 'p2p_estimator_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   final VoidCallback onThemeToggle;
@@ -43,6 +44,10 @@ class _MainNavigationState extends State<MainNavigation> {
             onHistorialUpdate: _updateHistorial,
             storage: widget.storage,
           ),
+          P2pEstimatorScreen(
+            storage: widget.storage,
+            onThemeToggle: widget.onThemeToggle,
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -51,6 +56,7 @@ class _MainNavigationState extends State<MainNavigation> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.calculate), label: 'Calculadora'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
+          NavigationDestination(icon: Icon(Icons.price_change), label: 'Estimador P2P'),
         ],
       ),
     );
