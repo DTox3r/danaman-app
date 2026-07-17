@@ -66,7 +66,16 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.onHistorialUpdate(nuevoHistorial);
     }
     
-    if (mounted) setState(() => isLoading = false);
+    if (mounted) {
+      setState(() => isLoading = false);
+      if (res.offlineMode) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Error de conexión. Mostrando tasas guardadas en caché.", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.redAccent,
+          duration: Duration(seconds: 4),
+        ));
+      }
+    }
     HapticFeedback.mediumImpact();
     Future.delayed(const Duration(seconds: 10), () { if (mounted) setState(() => canRefresh = true); });
   }
