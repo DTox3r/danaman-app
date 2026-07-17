@@ -22,8 +22,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoading = true, canRefresh = true, esTasaFutura = false, modoCompra = true;
   final TextEditingController _controller = TextEditingController();
   final TextEditingController _tasaManualController = TextEditingController();
-  double resultado = 0.0;
-  String monedaSeleccionada = "USD BCV";
   
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'es_VE', symbol: '', decimalDigits: 2);
 
@@ -70,32 +68,24 @@ class _HomeScreenState extends State<HomeScreen> {
     
     if (mounted) setState(() => isLoading = false);
     HapticFeedback.mediumImpact();
-    _ejecutarCalculo(_controller.text);
     Future.delayed(const Duration(seconds: 10), () { if (mounted) setState(() => canRefresh = true); });
   }
 
-  void _ejecutarCalculo(String v) {
-    double m = double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
-    double t = 0.0;
-    if (monedaSeleccionada == "Tasa Manual") {
-      t = double.tryParse(_tasaManualController.text.replaceAll(',', '.')) ?? 0.0;
-    } else {
-      t = (monedaSeleccionada.contains("USD")) ? bcvDolar : (monedaSeleccionada.contains("EUR")) ? bcvEuro : (monedaSeleccionada.contains("COMPRA")) ? binanceCompra : binanceVenta;
-    }
-    setState(() => resultado = t > 0 ? (modoCompra ? m * t : m / t) : 0.0);
-  }
-
-  String _generarPlantilla() {
-    String moneda = (monedaSeleccionada == "Tasa Manual") ? "Divisa" : monedaSeleccionada.split(' ')[0];
-    double t = 0.0;
-    if (monedaSeleccionada == "Tasa Manual") {
-      t = double.tryParse(_tasaManualController.text.replaceAll(',', '.')) ?? 0.0;
-    } else {
-      t = (monedaSeleccionada.contains("USD")) ? bcvDolar : (monedaSeleccionada.contains("EUR")) ? bcvEuro : (monedaSeleccionada.contains("COMPRA")) ? binanceCompra : binanceVenta;
-    }
+  String _generarPlantillaUnica(String nombre, double tasa, double calc, double monto) {
     String f = DateFormat('dd/MM/yyyy').format(DateTime.now());
     String h = DateFormat('hh:mm a').format(DateTime.now());
-    return "📊 *Convertidor Pro - Reporte*\n📅 $f | $h\n🔹 *Monto:* ${_currencyFormat.format(double.tryParse(_controller.text.replaceAll(',', '.')) ?? 0.0)} ${modoCompra ? moneda : 'Bs'}\n🔹 *Tasa:* ${_currencyFormat.format(t)} ($monedaSeleccionada)\n✅ *Total: ${_currencyFormat.format(resultado)} ${modoCompra ? 'Bs' : moneda}*\n---";
+    String moneda = "Divisa"; 
+    if (nombre.contains("EUR")) moneda = "EUR";
+    else if (nombre.contains("USD") || nombre.contains("BINANCE")) moneda = "USD";
+    return "📊 *Convertidor Pro - Reporte*\n📅 $f | $h\n🔹 *Monto:* ${_currencyFormat.format(monto)} ${modoCompra ? moneda : 'Bs'}\n🔹 *Tasa:* ${_currencyFormat.format(tasa)} ($nombre)\n✅ *Total: ${_currencyFormat.format(calc)} ${modoCompra ? 'Bs' : moneda}*\n---";
+  }
+
+  void _copiarUnico(String nombre, double tasa, double calc, double monto) {
+    HapticFeedback.lightImpact();
+    Clipboard.setData(ClipboardData(text: _generarPlantillaUnica(nombre, tasa, calc, monto))).then((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Plantilla copiada"), duration: Duration(seconds: 1)));
+    });
   }
 
   @override
@@ -144,41 +134,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCalculadora(Color txtCol) {
+    double monto = double.tryParse(_controller.text.replaceAll(',', '.')) ?? 0.0;
+    double tasaManual = double.tryParse(_tasaManualController.text.replaceAll(',', '.')) ?? 0.0;
+
     return Column(children: [
-      DropdownButtonFormField<String>(
-        value: monedaSeleccionada, // DropdownMenuItem value still uses value, DropdownButtonFormField in older versions uses initialValue but value works too, ignoring warning.
-        isDense: true,
-        style: TextStyle(fontSize: 14, color: txtCol, fontWeight: FontWeight.bold),
-        items: ["USD BCV", "EUR BCV", "Binance COMPRA", "Binance VENTA", "Tasa Manual"].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-        onChanged: (v) { 
-          HapticFeedback.selectionClick();
-          setState(() => monedaSeleccionada = v!); 
-          _ejecutarCalculo(_controller.text); 
-        },
-        decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8), border: OutlineInputBorder(), labelText: "Indicador"),
-      ),
-      if (monedaSeleccionada == "Tasa Manual")
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: TextField(
-            controller: _tasaManualController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: TextStyle(fontSize: 14, color: txtCol, fontWeight: FontWeight.bold),
-            decoration: const InputDecoration(
-              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              border: OutlineInputBorder(),
-              labelText: "Ingrese Tasa Manual (Bs)",
-            ),
-            onChanged: (v) => _ejecutarCalculo(_controller.text),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: TextField(
+          controller: _tasaManualController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: TextStyle(fontSize: 14, color: txtCol, fontWeight: FontWeight.bold),
+          decoration: const InputDecoration(
+            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            border: OutlineInputBorder(),
+            labelText: "Tasa Manual Opcional (Bs)",
           ),
+          onChanged: (v) => setState(() {}),
         ),
+      ),
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Text(modoCompra ? "Divisas" : "Bs", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
           IconButton(onPressed: () { 
             HapticFeedback.lightImpact();
-            setState(() { modoCompra = !modoCompra; _ejecutarCalculo(_controller.text); }); 
+            setState(() { modoCompra = !modoCompra; }); 
           }, icon: const Icon(Icons.swap_horiz, size: 30, color: Colors.orange)),
           Text(modoCompra ? "Bs" : "Divisas", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
         ]),
@@ -190,50 +170,57 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: InputDecoration(
           labelText: modoCompra ? "Cantidad en Divisas" : "Cantidad en Bolívares", 
           border: const OutlineInputBorder(),
+          prefixIcon: const Icon(Icons.calculate_outlined),
           suffixIcon: _controller.text.isNotEmpty ? IconButton(
             icon: const Icon(Icons.clear),
             onPressed: () {
               _controller.clear();
-              _ejecutarCalculo('');
+              setState(() {});
             },
           ) : null,
         ),
-        onChanged: _ejecutarCalculo,
+        onChanged: (v) => setState(() {}),
       ),
-      const SizedBox(height: 12),
-      _buildCuadroResultado(),
+      const SizedBox(height: 15),
+      
+      // Resultados Universales
+      _resultCard("USD BCV", bcvDolar, monto, Colors.blue),
+      _resultCard("EUR BCV", bcvEuro, monto, Colors.purple),
+      _resultCard("BINANCE VENTA", binanceVenta, monto, Colors.deepOrange),
+      _resultCard("BINANCE COMPRA", binanceCompra, monto, Colors.orange),
+      if (tasaManual > 0) _resultCard("TASA MANUAL", tasaManual, monto, Colors.teal),
     ]);
   }
 
-  Widget _buildCuadroResultado() {
+  Widget _resultCard(String nombre, double tasa, double monto, Color color) {
+    if (tasa == 0.0) return const SizedBox(); 
+    double calc = modoCompra ? (monto * tasa) : (monto / tasa);
     return Container(
+      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.orange.withAlpha(13), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange.withAlpha(77))),
-      child: Column(children: [
-        Text(modoCompra ? "TOTAL BS" : "TOTAL DIVISAS", style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange)),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            transitionBuilder: (Widget child, Animation<double> animation) {
-              return ScaleTransition(scale: animation, child: child);
-            },
-            child: Text(
-              _currencyFormat.format(resultado), 
-              key: ValueKey<double>(resultado),
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.orange)
+      decoration: BoxDecoration(color: color.withAlpha(15), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withAlpha(50))),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(nombre, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(
+                    _currencyFormat.format(calc), 
+                    key: ValueKey<double>(calc),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 15),
-          IconButton(icon: const Icon(Icons.copy, size: 20), onPressed: () {
-            HapticFeedback.lightImpact();
-            Clipboard.setData(ClipboardData(text: _generarPlantilla())).then((_) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Plantilla copiada"), duration: Duration(seconds: 1)));
-            });
-          }),
-          IconButton(icon: const Icon(Icons.share, size: 20, color: Colors.green), onPressed: () { Share.share(_generarPlantilla()); }),
-        ]),
-      ]),
+          IconButton(icon: Icon(Icons.copy, size: 20, color: color), onPressed: () => _copiarUnico(nombre, tasa, calc, monto)),
+          IconButton(icon: Icon(Icons.share, size: 20, color: color), onPressed: () => Share.share(_generarPlantillaUnica(nombre, tasa, calc, monto))),
+        ],
+      ),
     );
   }
 
