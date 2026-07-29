@@ -43,26 +43,30 @@ class ApiService {
     String futureTasaInfo = "";
 
     try {
-      binanceCompra = await _fetchBinance("BUY");
-      binanceVenta = await _fetchBinance("SELL");
-
       DateTime ahora = DateTime.now();
       String hoyStr = DateFormat('dd/MM/yyyy').format(ahora);
       List<String> hist = storage.getHistorial();
-      
-      // Si Binance falla por timeout, lo rescatamos del historial y marcamos offline
-      if (binanceCompra == 0.0 || binanceVenta == 0.0) {
-        offlineMode = true;
-        binanceCompra = storage.buscarUltimoValido("BINANCE COMPRA", "", hist);
-        binanceVenta = storage.buscarUltimoValido("BINANCE VENTA", "", hist);
-      }
 
-      double savedDolar = storage.buscarUltimoValido("BCV Dolar", hoyStr, hist);
-      double savedEuro = storage.buscarUltimoValido("BCV Euro", hoyStr, hist);
+      final binanceFuture = Future.wait([
+        _fetchBinance("BUY"),
+        _fetchBinance("SELL")
+      ]).then((results) {
+        binanceCompra = results[0];
+        binanceVenta = results[1];
+        if (binanceCompra == 0.0 || binanceVenta == 0.0) {
+          offlineMode = true;
+          binanceCompra = storage.buscarUltimoValido("BINANCE COMPRA", "", hist);
+          binanceVenta = storage.buscarUltimoValido("BINANCE VENTA", "", hist);
+        }
+      });
+
+      final bcvFuture = () async {
+        double savedDolar = storage.buscarUltimoValido("BCV Dolar", hoyStr, hist);
+        double savedEuro = storage.buscarUltimoValido("BCV Euro", hoyStr, hist);
 
       // Siempre intentamos buscar en la web para detectar si ya anunciaron la tasa de mañana
-      try {
-        final resWeb = await http.get(Uri.parse('https://www.bcv.org.ve/')).timeout(const Duration(seconds: 15));
+        try {
+        final resWeb = await http.get(Uri.parse('https://www.bcv.org.ve/')).timeout(const Duration(seconds: 10));
         if (resWeb.statusCode == 200) {
           var doc = parse(resWeb.body);
           var usdT = doc.getElementById('dolar')?.querySelector('strong')?.text.trim();
@@ -128,7 +132,11 @@ class ApiService {
           infoTasa = "Modo Offline - Tasas BCV rescatadas"; 
           offlineMode = true;
         }
-      }
+      } // Closes catch block
+    }(); // Closes async function and executes it
+
+    await Future.wait([binanceFuture, bcvFuture]);
+
     } catch (e) {
       List<String> hist = storage.getHistorial();
       bcvDolar = storage.buscarUltimoValido("BCV Dolar", "", hist);
@@ -156,7 +164,7 @@ class ApiService {
       final res = await http.post(Uri.parse('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({"asset": "USDT", "fiat": "VES", "tradeType": type, "rows": 1, "page": 1, "publisherType": "merchant"}),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 10));
       return double.parse(jsonDecode(res.body)['data'][0]['adv']['price'].toString());
     } catch (e) { return 0.0; }
   }
