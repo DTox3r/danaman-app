@@ -48,7 +48,7 @@ class HistoryScreen extends StatelessWidget {
       child: ExpansionTile(leading: Icon(Icons.folder, color: col), title: Text(cat, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), subtitle: Text("${filtrado.length} registros"),
         children: [
           if (filtrado.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: col.withAlpha(13), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_extremoText("MÍNIMO", min, Colors.green), _extremoText("MÁXIMO", max, Colors.red)])),
-          ...filtrado.map((i) { var p = i.split('|'); return ListTile(dense: true, title: Text(p[1], style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text("${p[2]} - ${p[3]}")); }).toList(),
+          ...filtrado.map((i) { var p = i.split('|'); return ListTile(dense: true, title: Text(p[1], style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text("${p[2]} - ${p[3]}")); }),
         ],
       ),
     );
@@ -57,7 +57,7 @@ class HistoryScreen extends StatelessWidget {
   Widget _extremoText(String l, double v, Color c) => Column(children: [Text(l, style: TextStyle(fontSize: 9, color: c)), Text(v.toStringAsFixed(2), style: TextStyle(fontSize: 16, color: c))]);
 
   Future<void> _exportarCSV(List<String> h) async {
-    String csv = "Indicador,Tasa,Fecha,Hora\n" + h.map((e) => e.replaceAll('|', ',')).join('\n');
+    String csv = "Indicador,Tasa,Fecha,Hora\n${h.map((e) => e.replaceAll('|', ',')).join('\n')}";
     final dir = await getTemporaryDirectory();
     final file = File("${dir.path}/historial_tasas.csv");
     await file.writeAsString(csv);

@@ -84,8 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
     String f = DateFormat('dd/MM/yyyy').format(DateTime.now());
     String h = DateFormat('hh:mm a').format(DateTime.now());
     String moneda = "Divisa"; 
-    if (nombre.contains("EUR")) moneda = "EUR";
-    else if (nombre.contains("USD") || nombre.contains("BINANCE")) moneda = "USD";
+    if (nombre.contains("EUR")) {
+      moneda = "EUR";
+    } else if (nombre.contains("USD") || nombre.contains("BINANCE")) {
+      moneda = "USD";
+    }
     return "📊 *Convertidor Pro - Reporte*\n📅 $f | $h\n🔹 *Monto:* ${_currencyFormat.format(monto)} ${modoCompra ? moneda : 'Bs'}\n🔹 *Tasa:* ${_currencyFormat.format(tasa)} ($nombre)\n✅ *Total: ${_currencyFormat.format(calc)} ${modoCompra ? 'Bs' : moneda}*\n---";
   }
 
@@ -143,8 +146,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCalculadora(Color txtCol) {
-    double monto = double.tryParse(_controller.text.replaceAll(',', '.')) ?? 0.0;
-    double tasaManual = double.tryParse(_tasaManualController.text.replaceAll(',', '.')) ?? 0.0;
+    double monto = ApiService.parseRate(_controller.text) ?? 0.0;
+    double tasaManual = ApiService.parseRate(_tasaManualController.text) ?? 0.0;
 
     return Column(children: [
       Padding(

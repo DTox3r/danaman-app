@@ -27,10 +27,29 @@ class ApiResult {
 }
 
 class ApiService {
-  static const List<String> _meses = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-  ];
+  /// Parsea números con formato latino (1.234,56), anglosajón (1,234.56),
+  /// o simplemente con comas decimales (896,12).
+  static double? parseRate(String? text) {
+    if (text == null) return null;
+    try {
+      String clean = text.trim();
+      if (clean.contains(',') && clean.contains('.')) {
+        if (clean.indexOf('.') < clean.indexOf(',')) {
+          // Formato latino / venezolano: 1.004,95657762 -> miles es '.', decimal es ','
+          clean = clean.replaceAll('.', '').replaceAll(',', '.');
+        } else {
+          // Formato anglosajón: 1,004.95 -> miles es ',', decimal es '.'
+          clean = clean.replaceAll(',', '');
+        }
+      } else if (clean.contains(',')) {
+        // Solo coma decimal: 896,12 -> 896.12
+        clean = clean.replaceAll(',', '.');
+      }
+      return double.parse(clean);
+    } catch (e) {
+      return null;
+    }
+  }
 
   Future<ApiResult> fetchAllRates(StorageService storage) async {
     double binanceCompra = 0.0;
@@ -55,8 +74,8 @@ class ApiService {
         binanceVenta = results[1];
         if (binanceCompra == 0.0 || binanceVenta == 0.0) {
           offlineMode = true;
-          binanceCompra = storage.buscarUltimoValido("BINANCE COMPRA", "", hist);
-          binanceVenta = storage.buscarUltimoValido("BINANCE VENTA", "", hist);
+          binanceCompra = storage.buscarUltimoValido("Binance Compra", "", hist);
+          binanceVenta = storage.buscarUltimoValido("Binance Venta", "", hist);
         }
       });
 
@@ -64,37 +83,29 @@ class ApiService {
         double savedDolar = storage.buscarUltimoValido("BCV Dolar", hoyStr, hist);
         double savedEuro = storage.buscarUltimoValido("BCV Euro", hoyStr, hist);
 
-      // Siempre intentamos buscar en la web para detectar si ya anunciaron la tasa de mañana
         try {
-        final resWeb = await http.get(Uri.parse('https://www.bcv.org.ve/')).timeout(const Duration(seconds: 10));
-        if (resWeb.statusCode == 200) {
-          var doc = parse(resWeb.body);
-          var usdT = doc.getElementById('dolar')?.querySelector('strong')?.text.trim();
-          var eurT = doc.getElementById('euro')?.querySelector('strong')?.text.trim();
-          var fechaT = doc.querySelector('.date-display-single')?.text.trim() ?? "";
-          
-          if (usdT != null && eurT != null) {
-            double usdWeb = double.parse(usdT.replaceAll(',', '.'));
-            double eurWeb = double.parse(eurT.replaceAll(',', '.'));
+          final resWeb = await http.get(Uri.parse('https://www.bcv.org.ve/')).timeout(const Duration(seconds: 10));
+          if (resWeb.statusCode == 200) {
+            var doc = parse(resWeb.body);
+            var usdT = doc.getElementById('dolar')?.querySelector('strong')?.text.trim();
+            var eurT = doc.getElementById('euro')?.querySelector('strong')?.text.trim();
+            var fechaT = doc.querySelector('.date-display-single')?.text.trim() ?? "";
             
-            if (usdWeb > 20.0) {
-              // 1. Extraemos la fecha del BCV como un objeto DateTime real
+            double? usdWeb = parseRate(usdT);
+            double? eurWeb = parseRate(eurT);
+
+            if (usdWeb != null && eurWeb != null && usdWeb > 20.0) {
               DateTime? fechaBCV = _parseBCVDate(fechaT);
               
-              // 2. Comparamos matemáticamente si la fecha del BCV es del futuro
               bool esTasaFuturaReal = false;
               if (fechaBCV != null) {
-                // Comparamos sin importar la hora, solo el día
                 DateTime hoy = DateTime(ahora.year, ahora.month, ahora.day);
-                
-                // Si la fecha del BCV es estrictamente mayor a hoy, es la tasa de mañana (o el lunes)
                 if (fechaBCV.isAfter(hoy)) {
                   esTasaFuturaReal = true;
                 }
               }
 
               if (esTasaFuturaReal) {
-                // Es una tasa futura. Mostrar la última conocida en los cuadros principales.
                 esTasaFutura = true;
                 double backupDolar = storage.buscarUltimoValido("BCV Dolar", "", hist);
                 double backupEuro = storage.buscarUltimoValido("BCV Euro", "", hist);
@@ -110,32 +121,28 @@ class ApiService {
                 esTasaFutura = false; 
               }
             } else {
-              throw Exception("Tasa BCV muy baja o inválida");
+              throw Exception("No se pudieron parsear las tasas del BCV o valor inválido");
             }
           } else {
-            throw Exception("No se encontraron elementos de tasa en la web");
+            throw Exception("Error HTTP ${resWeb.statusCode} al consultar BCV");
           }
-        } else {
-          throw Exception("Error HTTP al consultar BCV");
-        }
-      } catch (e) {
-        // Fallback en caso de error web (ej: timeout o caída de la página)
-        offlineMode = true;
-        if (savedDolar > 0 && savedEuro > 0) {
-          bcvDolar = savedDolar;
-          bcvEuro = savedEuro;
-          infoTasa = "Tasas BCV de hoy ($hoyStr)";
-          esTasaFutura = false;
-        } else {
-          bcvDolar = storage.buscarUltimoValido("BCV Dolar", "", hist);
-          bcvEuro = storage.buscarUltimoValido("BCV Euro", "", hist);
-          infoTasa = "Modo Offline - Tasas BCV rescatadas"; 
+        } catch (e) {
           offlineMode = true;
+          if (savedDolar > 0 && savedEuro > 0) {
+            bcvDolar = savedDolar;
+            bcvEuro = savedEuro;
+            infoTasa = "Tasas BCV de hoy ($hoyStr)";
+            esTasaFutura = false;
+          } else {
+            bcvDolar = storage.buscarUltimoValido("BCV Dolar", "", hist);
+            bcvEuro = storage.buscarUltimoValido("BCV Euro", "", hist);
+            infoTasa = "Modo Offline - Tasas BCV rescatadas"; 
+            offlineMode = true;
+          }
         }
-      } // Closes catch block
-    }(); // Closes async function and executes it
+      }();
 
-    await Future.wait([binanceFuture, bcvFuture]);
+      await Future.wait([binanceFuture, bcvFuture]);
 
     } catch (e) {
       List<String> hist = storage.getHistorial();
@@ -161,12 +168,30 @@ class ApiService {
 
   Future<double> _fetchBinance(String type) async {
     try {
-      final res = await http.post(Uri.parse('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search'),
+      final res = await http.post(
+        Uri.parse('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({"asset": "USDT", "fiat": "VES", "tradeType": type, "rows": 1, "page": 1, "publisherType": "merchant"}),
+        body: jsonEncode({
+          "asset": "USDT",
+          "fiat": "VES",
+          "tradeType": type,
+          "rows": 1,
+          "page": 1,
+          "publisherType": "merchant",
+        }),
       ).timeout(const Duration(seconds: 10));
-      return double.parse(jsonDecode(res.body)['data'][0]['adv']['price'].toString());
-    } catch (e) { return 0.0; }
+
+      final data = jsonDecode(res.body);
+      if (data != null && data['data'] != null && (data['data'] as List).isNotEmpty) {
+        var priceStr = data['data'][0]['adv']?['price']?.toString();
+        if (priceStr != null) {
+          return parseRate(priceStr) ?? 0.0;
+        }
+      }
+      return 0.0;
+    } catch (e) {
+      return 0.0;
+    }
   }
 
   // Nueva función matemática para transformar el texto del BCV en una Fecha Real

@@ -44,11 +44,16 @@ class StorageService {
   
   double buscarUltimoValido(String prefijo, String fecha, List<String> historial) {
     try {
+      final prefijoLower = prefijo.toLowerCase().trim();
       if (fecha.isNotEmpty) {
-        String registro = historial.firstWhere((e) => e.startsWith(prefijo) && e.contains(fecha));
+        String registro = historial.firstWhere((e) =>
+          e.toLowerCase().startsWith(prefijoLower) && e.contains(fecha)
+        );
         return double.parse(registro.split('|')[1]);
       }
-      String registroGenerico = historial.firstWhere((e) => e.startsWith(prefijo));
+      String registroGenerico = historial.firstWhere((e) =>
+        e.toLowerCase().startsWith(prefijoLower)
+      );
       return double.parse(registroGenerico.split('|')[1]);
     } catch (e) { 
       return 0.0; 

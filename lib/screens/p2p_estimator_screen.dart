@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../services/storage_service.dart';
+import '../services/api_service.dart';
 
 class P2pEstimatorScreen extends StatefulWidget {
   final StorageService storage;
@@ -48,8 +49,8 @@ class _P2pEstimatorScreenState extends State<P2pEstimatorScreen> {
   }
 
   void _calcular() {
-    double usdt = double.tryParse(_usdtController.text.replaceAll(',', '.')) ?? 0.0;
-    double feeUSDT = double.tryParse(_feeController.text.replaceAll(',', '.')) ?? 0.0;
+    double usdt = ApiService.parseRate(_usdtController.text) ?? 0.0;
+    double feeUSDT = ApiService.parseRate(_feeController.text) ?? 0.0;
     
     // Según las capturas de Binance:
     // Al COMPRAR: Pagas por (USDT deseado + comisión)
@@ -95,7 +96,7 @@ class _P2pEstimatorScreenState extends State<P2pEstimatorScreen> {
           children: [
             // Dropdown para operación
             DropdownButtonFormField<String>(
-              value: operacion,
+              initialValue: operacion,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: "Operación en Binance",
