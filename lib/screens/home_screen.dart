@@ -20,14 +20,16 @@ class _HomeScreenState extends State<HomeScreen> {
   String infoTasa = "Cargando...";
   String futureTasaInfo = "";
   bool isLoading = true, canRefresh = true, esTasaFutura = false, modoCompra = true;
+  bool modoCrm = false;
+  String monedaSeleccionada = "USD BCV";
   final TextEditingController _controller = TextEditingController();
-  final TextEditingController _tasaManualController = TextEditingController();
   
   final NumberFormat _currencyFormat = NumberFormat.currency(locale: 'es_VE', symbol: '', decimalDigits: 2);
 
   @override
   void initState() { 
     super.initState(); 
+    modoCrm = widget.storage.prefs.getBool('modo_crm') ?? false;
     _controller.addListener(() {
       setState(() {}); // Forzar reconstrucción para mostrar/ocultar el botón (X)
     });
@@ -37,7 +39,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _controller.dispose();
-    _tasaManualController.dispose();
     super.dispose();
   }
 
@@ -80,6 +81,21 @@ class _HomeScreenState extends State<HomeScreen> {
     Future.delayed(const Duration(seconds: 10), () { if (mounted) setState(() => canRefresh = true); });
   }
 
+  double _obtenerTasa(String moneda) {
+    switch (moneda) {
+      case "USD BCV":
+        return bcvDolar;
+      case "EUR BCV":
+        return bcvEuro;
+      case "BINANCE COMPRA":
+        return binanceCompra;
+      case "BINANCE VENTA":
+        return binanceVenta;
+      default:
+        return 0.0;
+    }
+  }
+
   String _generarPlantillaUnica(String nombre, double tasa, double calc, double monto) {
     String f = DateFormat('dd/MM/yyyy').format(DateTime.now());
     String h = DateFormat('hh:mm a').format(DateTime.now());
@@ -105,7 +121,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color txtCol = isDark ? Colors.white : Colors.black;
     return Scaffold(
-      appBar: AppBar(title: const Text("Convertidor Pro de Tasas Version 4.6"), actions: [
+      appBar: AppBar(title: const Text("Convertidor Pro de Tasas"), actions: [
+        IconButton(
+          icon: Icon(modoCrm ? Icons.dashboard : Icons.tune),
+          tooltip: modoCrm ? "Cambiar a modo Selector" : "Cambiar a modo CRM Dashboard",
+          onPressed: () {
+            setState(() => modoCrm = !modoCrm);
+            widget.storage.prefs.setBool('modo_crm', modoCrm);
+            HapticFeedback.selectionClick();
+          },
+        ),
         IconButton(icon: const Icon(Icons.brightness_6), onPressed: widget.onThemeToggle),
         IconButton(icon: Icon(Icons.refresh, color: canRefresh ? null : Colors.grey), onPressed: canRefresh ? actualizarDatos : null),
       ]),
@@ -118,6 +143,32 @@ class _HomeScreenState extends State<HomeScreen> {
             if (esTasaFutura) _buildBanner(),
             _buildMonitores(),
             Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(infoTasa, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold))),
+            
+            // Selector de Interfaz (Selector vs CRM) con guardado persistente
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(
+                    value: false,
+                    icon: Icon(Icons.tune),
+                    label: Text("Selector"),
+                  ),
+                  ButtonSegment<bool>(
+                    value: true,
+                    icon: Icon(Icons.grid_view_rounded),
+                    label: Text("CRM Dashboard"),
+                  ),
+                ],
+                selected: {modoCrm},
+                onSelectionChanged: (Set<bool> sel) {
+                  setState(() => modoCrm = sel.first);
+                  widget.storage.prefs.setBool('modo_crm', modoCrm);
+                  HapticFeedback.selectionClick();
+                },
+              ),
+            ),
+            
             const Divider(),
             _buildCalculadora(txtCol),
           ]),
@@ -147,23 +198,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCalculadora(Color txtCol) {
     double monto = ApiService.parseRate(_controller.text) ?? 0.0;
-    double tasaManual = ApiService.parseRate(_tasaManualController.text) ?? 0.0;
 
     return Column(children: [
-      Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: TextField(
-          controller: _tasaManualController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: TextStyle(fontSize: 14, color: txtCol, fontWeight: FontWeight.bold),
-          decoration: const InputDecoration(
-            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            border: OutlineInputBorder(),
-            labelText: "Tasa Manual Opcional (Bs)",
+      // En modo Selector: Mostramos el desplegable de indicadores
+      if (!modoCrm)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: DropdownButtonFormField<String>(
+            initialValue: monedaSeleccionada,
+            isDense: true,
+            style: TextStyle(fontSize: 14, color: txtCol, fontWeight: FontWeight.bold),
+            items: const [
+              DropdownMenuItem(value: "USD BCV", child: Text("USD BCV")),
+              DropdownMenuItem(value: "EUR BCV", child: Text("EUR BCV")),
+              DropdownMenuItem(value: "BINANCE COMPRA", child: Text("BINANCE COMPRA")),
+              DropdownMenuItem(value: "BINANCE VENTA", child: Text("BINANCE VENTA")),
+            ],
+            onChanged: (v) {
+              if (v != null) {
+                HapticFeedback.selectionClick();
+                setState(() => monedaSeleccionada = v);
+              }
+            },
+            decoration: const InputDecoration(
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              border: OutlineInputBorder(),
+              labelText: "Indicador Seleccionado",
+            ),
           ),
-          onChanged: (v) => setState(() {}),
         ),
-      ),
+
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -195,13 +259,64 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       const SizedBox(height: 15),
       
-      // Resultados Universales
-      _resultCard("USD BCV", bcvDolar, monto, Colors.blue),
-      _resultCard("EUR BCV", bcvEuro, monto, Colors.purple),
-      _resultCard("BINANCE VENTA", binanceVenta, monto, Colors.deepOrange),
-      _resultCard("BINANCE COMPRA", binanceCompra, monto, Colors.orange),
-      if (tasaManual > 0) _resultCard("TASA MANUAL", tasaManual, monto, Colors.teal),
+      // Si estamos en modo Selector: un solo cuadro consolidado
+      if (!modoCrm)
+        _buildCuadroResultado(monto)
+      else ...[
+        // Si estamos en modo CRM: resultados múltiples simultáneos
+        _resultCard("USD BCV", bcvDolar, monto, Colors.blue),
+        _resultCard("EUR BCV", bcvEuro, monto, Colors.purple),
+        _resultCard("BINANCE VENTA", binanceVenta, monto, Colors.deepOrange),
+        _resultCard("BINANCE COMPRA", binanceCompra, monto, Colors.orange),
+      ],
     ]);
+  }
+
+  Widget _buildCuadroResultado(double monto) {
+    double tasa = _obtenerTasa(monedaSeleccionada);
+    double calc = tasa > 0 ? (modoCompra ? (monto * tasa) : (monto / tasa)) : 0.0;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withAlpha(15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withAlpha(80)),
+      ),
+      child: Column(children: [
+        Text(
+          modoCompra ? "TOTAL EN BOLÍVARES (BS)" : "TOTAL EN DIVISAS",
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange),
+        ),
+        const SizedBox(height: 8),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Expanded(
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return ScaleTransition(scale: animation, child: child);
+                },
+                child: Text(
+                  _currencyFormat.format(calc), 
+                  key: ValueKey<double>(calc),
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.orange),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 22),
+            tooltip: "Copiar plantilla",
+            onPressed: () => _copiarUnico(monedaSeleccionada, tasa, calc, monto),
+          ),
+          IconButton(
+            icon: const Icon(Icons.share, size: 22, color: Colors.green),
+            tooltip: "Compartir plantilla",
+            onPressed: () => Share.share(_generarPlantillaUnica(monedaSeleccionada, tasa, calc, monto)),
+          ),
+        ]),
+      ]),
+    );
   }
 
   Widget _resultCard(String nombre, double tasa, double monto, Color color) {

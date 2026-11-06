@@ -105,20 +105,17 @@ class ApiService {
                 }
               }
 
+              // Se autoriza aplicar la tasa publicada de inmediato (ej: tasa de lunes/martes publicada el viernes)
+              bcvDolar = usdWeb; 
+              bcvEuro = eurWeb; 
+              esTasaFutura = esTasaFuturaReal; 
+
               if (esTasaFuturaReal) {
-                esTasaFutura = true;
-                double backupDolar = storage.buscarUltimoValido("BCV Dolar", "", hist);
-                double backupEuro = storage.buscarUltimoValido("BCV Euro", "", hist);
-                
-                bcvDolar = (backupDolar > 0) ? backupDolar : usdWeb;
-                bcvEuro = (backupEuro > 0) ? backupEuro : eurWeb;
-                infoTasa = "Tasa anterior vigente en curso";
-                futureTasaInfo = "¡Atención! Nuevas tasas para $fechaT\nUSD: ${usdWeb.toStringAsFixed(2)} | EUR: ${eurWeb.toStringAsFixed(2)}";
+                infoTasa = "Tasas BCV oficiales para $fechaT";
+                futureTasaInfo = "📢 Nuevas tasas oficiales vigentes para $fechaT\nUSD: ${usdWeb.toStringAsFixed(2)} | EUR: ${eurWeb.toStringAsFixed(2)}";
               } else {
-                bcvDolar = usdWeb; 
-                bcvEuro = eurWeb; 
                 infoTasa = "Tasas BCV: $fechaT"; 
-                esTasaFutura = false; 
+                futureTasaInfo = "";
               }
             } else {
               throw Exception("No se pudieron parsear las tasas del BCV o valor inválido");

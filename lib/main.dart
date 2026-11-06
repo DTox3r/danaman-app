@@ -29,13 +29,29 @@ class ConvertidorApp extends StatefulWidget {
 }
 
 class _ConvertidorAppState extends State<ConvertidorApp> {
-  ThemeMode _themeMode = ThemeMode.system;
+  late ThemeMode _themeMode;
 
-  void toggleTheme() {
+  @override
+  void initState() {
+    super.initState();
+    final saved = widget.storage.prefs.getString('theme_mode');
+    if (saved == 'dark') {
+      _themeMode = ThemeMode.dark;
+    } else {
+      // Predeterminado: modo light
+      _themeMode = ThemeMode.light;
+    }
+  }
+
+  void toggleTheme() async {
     setState(
       () => _themeMode = _themeMode == ThemeMode.light
           ? ThemeMode.dark
           : ThemeMode.light,
+    );
+    await widget.storage.prefs.setString(
+      'theme_mode',
+      _themeMode == ThemeMode.dark ? 'dark' : 'light',
     );
   }
 

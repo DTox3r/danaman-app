@@ -30,7 +30,7 @@ class StorageService {
       localHistorial.insert(0, "Binance Compra|$binanceCompra|$f|$h");
       localHistorial.insert(1, "Binance Venta|$binanceVenta|$f|$h");
     }
-    if (!esTasaFutura && bcvDolar > 0) {
+    if (bcvDolar > 0) {
       localHistorial.insert(2, "BCV Dolar|$bcvDolar|$f|$h");
       localHistorial.insert(3, "BCV Euro|$bcvEuro|$f|$h");
     }
