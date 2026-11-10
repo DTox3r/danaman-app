@@ -8,7 +8,11 @@ class MainNavigation extends StatefulWidget {
   final VoidCallback onThemeToggle;
   final StorageService storage;
 
-  const MainNavigation({super.key, required this.onThemeToggle, required this.storage});
+  const MainNavigation({
+    super.key,
+    required this.onThemeToggle,
+    required this.storage,
+  });
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
@@ -35,9 +39,9 @@ class _MainNavigationState extends State<MainNavigation> {
         index: _selectedIndex,
         children: [
           HomeScreen(
-            onThemeToggle: widget.onThemeToggle, 
-            onHistorialUpdate: _updateHistorial, 
-            storage: widget.storage
+            onThemeToggle: widget.onThemeToggle,
+            onHistorialUpdate: _updateHistorial,
+            storage: widget.storage,
           ),
           HistoryScreen(
             historial: historial,
@@ -47,6 +51,7 @@ class _MainNavigationState extends State<MainNavigation> {
           P2pEstimatorScreen(
             storage: widget.storage,
             onThemeToggle: widget.onThemeToggle,
+            historial: historial,
           ),
         ],
       ),
@@ -54,9 +59,15 @@ class _MainNavigationState extends State<MainNavigation> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.calculate), label: 'Calculadora'),
+          NavigationDestination(
+            icon: Icon(Icons.calculate),
+            label: 'Calculadora',
+          ),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
-          NavigationDestination(icon: Icon(Icons.price_change), label: 'Estimador P2P'),
+          NavigationDestination(
+            icon: Icon(Icons.price_change),
+            label: 'Estimador P2P',
+          ),
         ],
       ),
     );
