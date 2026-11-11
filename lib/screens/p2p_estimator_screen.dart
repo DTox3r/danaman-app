@@ -100,12 +100,16 @@ class P2pEstimatorScreen extends StatefulWidget {
   final StorageService storage;
   final VoidCallback onThemeToggle;
   final List<String> historial;
+  final bool bankUseComma;
+  final VoidCallback? onBankFormatToggle;
 
   const P2pEstimatorScreen({
     super.key,
     required this.storage,
     required this.onThemeToggle,
     this.historial = const [],
+    this.bankUseComma = true,
+    this.onBankFormatToggle,
   });
 
   @override
@@ -580,10 +584,24 @@ class _P2pEstimatorScreenState extends State<P2pEstimatorScreen> {
     );
   }
 
+  void _copiarTexto(String texto, String mensaje) {
+    HapticFeedback.lightImpact();
+    Clipboard.setData(ClipboardData(text: texto)).then((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensaje), duration: const Duration(seconds: 2)),
+      );
+    });
+  }
+
   Widget _buildResultadoCard(bool isCompra) {
     final bool mostrarResultadoEnBs = porUsdt;
     final String mainLabel;
     final String mainValue;
+    final double usdtDisplay = isCompra
+        ? resultado.usdtNetos
+        : resultado.usdtBrutos;
 
     if (mostrarResultadoEnBs) {
       mainLabel = isCompra
@@ -594,11 +612,14 @@ class _P2pEstimatorScreenState extends State<P2pEstimatorScreen> {
       mainLabel = isCompra
           ? "RECIBES NETO EN BILLETERA"
           : "TOTAL USDT NECESARIOS";
-      final double usdtDisplay = isCompra
-          ? resultado.usdtNetos
-          : resultado.usdtBrutos;
       mainValue = "${usdtDisplay.toStringAsFixed(2)} USDT";
     }
+
+    final String montoBanco = widget.storage.formatAmountForBank(
+      resultado.totalBs,
+      useComma: widget.bankUseComma,
+    );
+    final bool tieneBs = resultado.totalBs > 0;
 
     return Container(
       padding: const EdgeInsets.all(15),
@@ -636,25 +657,95 @@ class _P2pEstimatorScreenState extends State<P2pEstimatorScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: Text(
-              mainValue,
-              key: ValueKey<String>(mainValue),
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.green,
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: tieneBs
+                ? () => _copiarTexto(
+                    mostrarResultadoEnBs
+                        ? montoBanco
+                        : usdtDisplay.toStringAsFixed(2),
+                    mostrarResultadoEnBs
+                        ? "Monto copiado para banco: $montoBanco"
+                        : "USDT copiado: ${usdtDisplay.toStringAsFixed(2)}",
+                  )
+                : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: Text(
+                  mainValue,
+                  key: ValueKey<String>(mainValue),
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
               ),
             ),
           ),
-          if (isCompra && porUsdt && resultado.totalBs > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              "Si transfieres sin céntimos: ${resultado.totalBs.ceil()} Bs",
-              style: const TextStyle(fontSize: 11, color: Colors.grey),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            alignment: WrapAlignment.center,
+            children: [
+              if (mostrarResultadoEnBs)
+                FilledButton.tonalIcon(
+                  onPressed: tieneBs
+                      ? () => _copiarTexto(
+                          montoBanco,
+                          "Monto copiado para banco: $montoBanco",
+                        )
+                      : null,
+                  icon: const Icon(Icons.account_balance_outlined, size: 18),
+                  label: Text(
+                    tieneBs
+                        ? "Copiar para banco ($montoBanco)"
+                        : "Copiar para banco",
+                  ),
+                )
+              else ...[
+                FilledButton.tonalIcon(
+                  onPressed: usdtDisplay > 0
+                      ? () => _copiarTexto(
+                          usdtDisplay.toStringAsFixed(2),
+                          "USDT copiado: ${usdtDisplay.toStringAsFixed(2)}",
+                        )
+                      : null,
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: const Text("Copiar USDT"),
+                ),
+                if (tieneBs)
+                  OutlinedButton.icon(
+                    onPressed: () => _copiarTexto(
+                      montoBanco,
+                      "Monto copiado para banco: $montoBanco",
+                    ),
+                    icon: const Icon(Icons.account_balance_outlined, size: 18),
+                    label: Text("Copiar Bs ($montoBanco)"),
+                  ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          ActionChip(
+            avatar: const Icon(Icons.tune, size: 14),
+            label: Text(
+              widget.bankUseComma
+                  ? "Formato banco: Coma (1234,56)"
+                  : "Formato banco: Punto (1234.56)",
+              style: const TextStyle(fontSize: 11),
             ),
-          ],
+            visualDensity: VisualDensity.compact,
+            onPressed: widget.onBankFormatToggle == null
+                ? null
+                : () {
+                    HapticFeedback.selectionClick();
+                    widget.onBankFormatToggle!();
+                  },
+          ),
         ],
       ),
     );

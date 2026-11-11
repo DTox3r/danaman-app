@@ -9,7 +9,16 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onThemeToggle;
   final Function(List<String>) onHistorialUpdate;
   final StorageService storage;
-  const HomeScreen({super.key, required this.onThemeToggle, required this.onHistorialUpdate, required this.storage});
+  final bool bankUseComma;
+  final VoidCallback? onBankFormatToggle;
+  const HomeScreen({
+    super.key,
+    required this.onThemeToggle,
+    required this.onHistorialUpdate,
+    required this.storage,
+    this.bankUseComma = true,
+    this.onBankFormatToggle,
+  });
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -113,7 +122,27 @@ class _HomeScreenState extends State<HomeScreen> {
     HapticFeedback.lightImpact();
     Clipboard.setData(ClipboardData(text: _generarPlantillaUnica(nombre, tasa, calc, monto))).then((_) {
       if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Plantilla copiada"), duration: Duration(seconds: 1)));
+    });
+  }
+
+  void _copiarMontoBanco(double calc) {
+    if (calc <= 0) return;
+    HapticFeedback.lightImpact();
+    final String limpio = widget.storage.formatAmountForBank(
+      calc,
+      useComma: widget.bankUseComma,
+    );
+    Clipboard.setData(ClipboardData(text: limpio)).then((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Monto copiado para banco: $limpio"),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     });
   }
 
@@ -258,8 +287,31 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         onChanged: (v) => setState(() {}),
       ),
-      const SizedBox(height: 15),
-      
+      const SizedBox(height: 10),
+      // Toggle rápido del separador decimal al copiar monto para apps bancarias
+      Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          ActionChip(
+            avatar: const Icon(Icons.account_balance_outlined, size: 15),
+            label: Text(
+              widget.bankUseComma
+                  ? "Formato banco: Coma (1234,56)"
+                  : "Formato banco: Punto (1234.56)",
+              style: const TextStyle(fontSize: 11),
+            ),
+            visualDensity: VisualDensity.compact,
+            onPressed: widget.onBankFormatToggle == null
+                ? null
+                : () {
+                    HapticFeedback.selectionClick();
+                    widget.onBankFormatToggle!();
+                  },
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+
       // Si estamos en modo Selector: un solo cuadro consolidado
       if (!modoCrm)
         _buildCuadroResultado(monto)
@@ -289,39 +341,52 @@ class _HomeScreenState extends State<HomeScreen> {
           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange),
         ),
         const SizedBox(height: 8),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Expanded(
-            child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return ScaleTransition(scale: animation, child: child);
-                },
-                child: Text(
-                  _currencyFormat.format(calc), 
-                  key: ValueKey<double>(calc),
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.orange),
-                ),
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: calc > 0 ? () => _copiarMontoBanco(calc) : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return ScaleTransition(scale: animation, child: child);
+              },
+              child: Text(
+                _currencyFormat.format(calc),
+                key: ValueKey<double>(calc),
+                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.orange),
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.copy, size: 22),
-            tooltip: "Copiar plantilla",
-            onPressed: () => _copiarUnico(monedaSeleccionada, tasa, calc, monto),
-          ),
-          IconButton(
-            icon: const Icon(Icons.share, size: 22, color: Colors.green),
-            tooltip: "Compartir plantilla",
-            onPressed: () => Share.share(_generarPlantillaUnica(monedaSeleccionada, tasa, calc, monto)),
-          ),
-        ]),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FilledButton.tonalIcon(
+              onPressed: calc > 0 ? () => _copiarMontoBanco(calc) : null,
+              icon: const Icon(Icons.account_balance_outlined, size: 18),
+              label: const Text("Copiar monto"),
+            ),
+            const SizedBox(width: 6),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 22),
+              tooltip: "Copiar reporte",
+              onPressed: () => _copiarUnico(monedaSeleccionada, tasa, calc, monto),
+            ),
+            IconButton(
+              icon: const Icon(Icons.share, size: 22, color: Colors.green),
+              tooltip: "Compartir reporte",
+              onPressed: () => Share.share(_generarPlantillaUnica(monedaSeleccionada, tasa, calc, monto)),
+            ),
+          ],
+        ),
       ]),
     );
   }
 
   Widget _resultCard(String nombre, double tasa, double monto, Color color) {
-    if (tasa == 0.0) return const SizedBox(); 
+    if (tasa == 0.0) return const SizedBox();
     double calc = modoCompra ? (monto * tasa) : (monto / tasa);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -330,23 +395,43 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(nombre, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Text(
-                    _currencyFormat.format(calc), 
-                    key: ValueKey<double>(calc),
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: calc > 0 ? () => _copiarMontoBanco(calc) : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(nombre, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: Text(
+                      _currencyFormat.format(calc),
+                      key: ValueKey<double>(calc),
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          IconButton(icon: Icon(Icons.copy, size: 20, color: color), onPressed: () => _copiarUnico(nombre, tasa, calc, monto)),
-          IconButton(icon: Icon(Icons.share, size: 20, color: color), onPressed: () => Share.share(_generarPlantillaUnica(nombre, tasa, calc, monto))),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.account_balance_outlined, size: 20, color: color),
+            tooltip: "Copiar monto para banco",
+            onPressed: calc > 0 ? () => _copiarMontoBanco(calc) : null,
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.copy, size: 20, color: color),
+            tooltip: "Copiar reporte",
+            onPressed: () => _copiarUnico(nombre, tasa, calc, monto),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.share, size: 20, color: color),
+            tooltip: "Compartir reporte",
+            onPressed: () => Share.share(_generarPlantillaUnica(nombre, tasa, calc, monto)),
+          ),
         ],
       ),
     );

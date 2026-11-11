@@ -52,6 +52,24 @@ void main() {
       expect(storage.buscarUltimoValido("binance venta", "", hist), 1015.00);
       expect(storage.buscarUltimoValido("bcv dolar", "", hist), 896.12);
     });
+
+    test('formatAmountForBank formats cleanly without thousands separator and respects comma/dot pref', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final storage = StorageService(prefs);
+
+      // Predeterminado: coma decimal para Banesco/VE, sin punto de miles ni redondeo a enteros
+      expect(storage.getBankUseComma(), isTrue);
+      expect(storage.formatAmountForBank(3261.96), "3261,96");
+      expect(storage.formatAmountForBank(10004.5), "10004,50");
+      expect(storage.formatAmountForBank(0.0), "0,00");
+
+      // Cambiar preferencia a punto decimal y persistir
+      await storage.setBankUseComma(false);
+      expect(storage.getBankUseComma(), isFalse);
+      expect(storage.formatAmountForBank(3261.96), "3261.96");
+      expect(storage.formatAmountForBank(10004.5), "10004.50");
+    });
   });
 
   group('ApiService Future Rate Resolution Rules', () {

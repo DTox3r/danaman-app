@@ -21,15 +21,23 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   List<String> historial = [];
+  bool _bankUseComma = true;
 
   @override
   void initState() {
     super.initState();
     historial = widget.storage.getHistorial();
+    _bankUseComma = widget.storage.getBankUseComma();
   }
 
   void _updateHistorial(List<String> nuevo) {
     setState(() => historial = nuevo);
+  }
+
+  void _toggleBankFormat() async {
+    final next = !_bankUseComma;
+    setState(() => _bankUseComma = next);
+    await widget.storage.setBankUseComma(next);
   }
 
   @override
@@ -42,6 +50,8 @@ class _MainNavigationState extends State<MainNavigation> {
             onThemeToggle: widget.onThemeToggle,
             onHistorialUpdate: _updateHistorial,
             storage: widget.storage,
+            bankUseComma: _bankUseComma,
+            onBankFormatToggle: _toggleBankFormat,
           ),
           HistoryScreen(
             historial: historial,
@@ -52,6 +62,8 @@ class _MainNavigationState extends State<MainNavigation> {
             storage: widget.storage,
             onThemeToggle: widget.onThemeToggle,
             historial: historial,
+            bankUseComma: _bankUseComma,
+            onBankFormatToggle: _toggleBankFormat,
           ),
         ],
       ),
