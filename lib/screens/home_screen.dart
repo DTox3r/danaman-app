@@ -63,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
         bcvDolar: bcvDolar,
         bcvEuro: bcvEuro,
         esTasaFutura: esTasaFutura,
+        guardarBcv: res.guardarBcvEnHistorial,
       );
       widget.onHistorialUpdate(nuevoHistorial);
     }

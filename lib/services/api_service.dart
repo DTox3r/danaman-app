@@ -13,6 +13,7 @@ class ApiResult {
   final bool esTasaFutura;
   final bool offlineMode;
   final String futureTasaInfo;
+  final bool guardarBcvEnHistorial;
 
   ApiResult({
     required this.binanceCompra,
@@ -23,6 +24,25 @@ class ApiResult {
     required this.esTasaFutura,
     this.offlineMode = false,
     this.futureTasaInfo = "",
+    this.guardarBcvEnHistorial = true,
+  });
+}
+
+class BcvResolution {
+  final double bcvDolar;
+  final double bcvEuro;
+  final String infoTasa;
+  final bool esTasaFutura;
+  final String futureTasaInfo;
+  final bool guardarBcvEnHistorial;
+
+  const BcvResolution({
+    required this.bcvDolar,
+    required this.bcvEuro,
+    required this.infoTasa,
+    required this.esTasaFutura,
+    required this.futureTasaInfo,
+    required this.guardarBcvEnHistorial,
   });
 }
 
@@ -68,6 +88,79 @@ class ApiService {
     }
   }
 
+  /// Determina la tasa BCV activa según el día actual y la fecha valor publicada.
+  /// Solo aplica anticipadamente una tasa futura cuando es VIERNES y la tasa
+  /// corresponde al LUNES (o MARTES si el lunes es feriado bancario).
+  static BcvResolution resolveBcvRates({
+    required DateTime ahora,
+    required DateTime? fechaBCV,
+    required String fechaTexto,
+    required double usdWeb,
+    required double eurWeb,
+    required double tasaHoyDolar,
+    required double tasaHoyEuro,
+    required double backupDolar,
+    required double backupEuro,
+  }) {
+    final DateTime hoy = DateTime(ahora.year, ahora.month, ahora.day);
+    final bool esTasaFuturaReal = fechaBCV != null && fechaBCV.isAfter(hoy);
+
+    if (!esTasaFuturaReal) {
+      return BcvResolution(
+        bcvDolar: usdWeb,
+        bcvEuro: eurWeb,
+        infoTasa: "Tasas BCV: $fechaTexto",
+        esTasaFutura: false,
+        futureTasaInfo: "",
+        guardarBcvEnHistorial: true,
+      );
+    }
+
+    final bool esViernes = ahora.weekday == DateTime.friday;
+    final bool esProxSemana =
+        fechaBCV.weekday == DateTime.monday ||
+        fechaBCV.weekday == DateTime.tuesday;
+    final int diffDias = fechaBCV.difference(hoy).inDays;
+    final bool aplicarAnticipada =
+        esViernes && esProxSemana && diffDias >= 1 && diffDias <= 4;
+
+    if (aplicarAnticipada) {
+      return BcvResolution(
+        bcvDolar: usdWeb,
+        bcvEuro: eurWeb,
+        infoTasa: "Tasa de $fechaTexto aplicada (viernes)",
+        esTasaFutura: true,
+        futureTasaInfo:
+            "📢 Tasa oficial para $fechaTexto aplicada por ser viernes\nUSD: ${usdWeb.toStringAsFixed(2)} | EUR: ${eurWeb.toStringAsFixed(2)}",
+        guardarBcvEnHistorial: true,
+      );
+    }
+
+    final double dolarVigente = tasaHoyDolar > 0
+        ? tasaHoyDolar
+        : (backupDolar > 0 ? backupDolar : usdWeb);
+    final double euroVigente = tasaHoyEuro > 0
+        ? tasaHoyEuro
+        : (backupEuro > 0 ? backupEuro : eurWeb);
+
+    final String hoyStr = DateFormat('dd/MM/yyyy').format(ahora);
+    final bool hayVigente =
+        (tasaHoyDolar > 0 && tasaHoyEuro > 0) ||
+        (backupDolar > 0 && backupEuro > 0);
+
+    return BcvResolution(
+      bcvDolar: dolarVigente,
+      bcvEuro: euroVigente,
+      infoTasa: hayVigente
+          ? "Tasa vigente en curso ($hoyStr)"
+          : "Sin tasa previa en caché · Publicada: $fechaTexto",
+      esTasaFutura: true,
+      futureTasaInfo:
+          "📢 Próxima tasa para $fechaTexto\nUSD: ${usdWeb.toStringAsFixed(2)} | EUR: ${eurWeb.toStringAsFixed(2)}",
+      guardarBcvEnHistorial: false,
+    );
+  }
+
   Future<ApiResult> fetchAllRates(StorageService storage) async {
     double binanceCompra = 0.0;
     double binanceVenta = 0.0;
@@ -77,6 +170,7 @@ class ApiService {
     bool esTasaFutura = false;
     bool offlineMode = false;
     String futureTasaInfo = "";
+    bool guardarBcvEnHistorial = true;
 
     try {
       DateTime ahora = DateTime.now();
@@ -111,6 +205,10 @@ class ApiService {
           hist,
         );
         double savedEuro = storage.buscarUltimoValido("BCV Euro", hoyStr, hist);
+        double tasaHoyDolar = storage.getTasaGuardadaPorFecha('USD', hoyStr);
+        if (tasaHoyDolar <= 0) tasaHoyDolar = savedDolar;
+        double tasaHoyEuro = storage.getTasaGuardadaPorFecha('EUR', hoyStr);
+        if (tasaHoyEuro <= 0) tasaHoyEuro = savedEuro;
 
         try {
           final resWeb = await http
@@ -136,28 +234,43 @@ class ApiService {
 
             if (usdWeb != null && eurWeb != null && usdWeb > 20.0) {
               DateTime? fechaBCV = _parseBCVDate(fechaT);
-
-              bool esTasaFuturaReal = false;
               if (fechaBCV != null) {
-                DateTime hoy = DateTime(ahora.year, ahora.month, ahora.day);
-                if (fechaBCV.isAfter(hoy)) {
-                  esTasaFuturaReal = true;
-                }
+                await storage.guardarTasaPorFecha(
+                  DateFormat('dd/MM/yyyy').format(fechaBCV),
+                  usdWeb,
+                  eurWeb,
+                );
               }
 
-              // Se autoriza aplicar la tasa publicada de inmediato (ej: tasa de lunes/martes publicada el viernes)
-              bcvDolar = usdWeb;
-              bcvEuro = eurWeb;
-              esTasaFutura = esTasaFuturaReal;
+              final double backupDolar = storage.buscarUltimoValido(
+                "BCV Dolar",
+                "",
+                hist,
+              );
+              final double backupEuro = storage.buscarUltimoValido(
+                "BCV Euro",
+                "",
+                hist,
+              );
 
-              if (esTasaFuturaReal) {
-                infoTasa = "Tasas BCV oficiales para $fechaT";
-                futureTasaInfo =
-                    "📢 Nuevas tasas oficiales vigentes para $fechaT\nUSD: ${usdWeb.toStringAsFixed(2)} | EUR: ${eurWeb.toStringAsFixed(2)}";
-              } else {
-                infoTasa = "Tasas BCV: $fechaT";
-                futureTasaInfo = "";
-              }
+              final resolution = resolveBcvRates(
+                ahora: ahora,
+                fechaBCV: fechaBCV,
+                fechaTexto: fechaT,
+                usdWeb: usdWeb,
+                eurWeb: eurWeb,
+                tasaHoyDolar: tasaHoyDolar,
+                tasaHoyEuro: tasaHoyEuro,
+                backupDolar: backupDolar,
+                backupEuro: backupEuro,
+              );
+
+              bcvDolar = resolution.bcvDolar;
+              bcvEuro = resolution.bcvEuro;
+              infoTasa = resolution.infoTasa;
+              esTasaFutura = resolution.esTasaFutura;
+              futureTasaInfo = resolution.futureTasaInfo;
+              guardarBcvEnHistorial = resolution.guardarBcvEnHistorial;
             } else {
               throw Exception(
                 "No se pudieron parsear las tasas del BCV o valor inválido",
@@ -168,9 +281,10 @@ class ApiService {
           }
         } catch (e) {
           offlineMode = true;
-          if (savedDolar > 0 && savedEuro > 0) {
-            bcvDolar = savedDolar;
-            bcvEuro = savedEuro;
+          guardarBcvEnHistorial = false;
+          if (tasaHoyDolar > 0 && tasaHoyEuro > 0) {
+            bcvDolar = tasaHoyDolar;
+            bcvEuro = tasaHoyEuro;
             infoTasa = "Tasas BCV de hoy ($hoyStr)";
             esTasaFutura = false;
           } else {
@@ -191,6 +305,7 @@ class ApiService {
       binanceVenta = 0.0;
       infoTasa = "Modo Offline - Tasas BCV rescatadas";
       offlineMode = true;
+      guardarBcvEnHistorial = false;
     }
 
     return ApiResult(
@@ -202,6 +317,7 @@ class ApiService {
       esTasaFutura: esTasaFutura,
       offlineMode: offlineMode,
       futureTasaInfo: futureTasaInfo,
+      guardarBcvEnHistorial: guardarBcvEnHistorial,
     );
   }
 
