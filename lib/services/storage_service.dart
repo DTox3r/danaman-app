@@ -4,24 +4,14 @@ import 'package:intl/intl.dart';
 class StorageService {
   final SharedPreferences prefs;
   static const String _historialKey = 'historial_v4_2_5';
-  static const String _bankDecimalCommaKey = 'bank_decimal_comma';
 
   StorageService(this.prefs);
 
-  /// Predeterminado `true` porque Banesco y la mayoría de apps bancarias en VE usan coma (`,`) para decimales.
-  bool getBankUseComma() => prefs.getBool(_bankDecimalCommaKey) ?? true;
-
-  Future<void> setBankUseComma(bool useComma) async {
-    await prefs.setBool(_bankDecimalCommaKey, useComma);
-  }
-
   /// Formatea un monto con 2 decimales exactos (sin redondear a enteros y sin separador de miles)
-  /// listo para pegar en apps bancarias (ej: `3261,96` o `3261.96`).
-  String formatAmountForBank(double amount, {bool? useComma}) {
+  /// listo para pegar en apps bancarias (ej: `3261,96`).
+  String formatAmountForBank(double amount) {
     final double safe = amount <= 0 ? 0.0 : amount;
-    final String fixed = safe.toStringAsFixed(2);
-    final bool comma = useComma ?? getBankUseComma();
-    return comma ? fixed.replaceAll('.', ',') : fixed;
+    return safe.toStringAsFixed(2).replaceAll('.', ',');
   }
 
   List<String> getHistorial() {

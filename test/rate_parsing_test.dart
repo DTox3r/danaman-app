@@ -53,64 +53,65 @@ void main() {
       expect(storage.buscarUltimoValido("bcv dolar", "", hist), 896.12);
     });
 
-    test('formatAmountForBank formats cleanly without thousands separator and respects comma/dot pref', () async {
-      SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
-      final storage = StorageService(prefs);
+    test(
+      'formatAmountForBank formats cleanly with comma decimal and without thousands separator',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final storage = StorageService(prefs);
 
-      // Predeterminado: coma decimal para Banesco/VE, sin punto de miles ni redondeo a enteros
-      expect(storage.getBankUseComma(), isTrue);
-      expect(storage.formatAmountForBank(3261.96), "3261,96");
-      expect(storage.formatAmountForBank(10004.5), "10004,50");
-      expect(storage.formatAmountForBank(0.0), "0,00");
-
-      // Cambiar preferencia a punto decimal y persistir
-      await storage.setBankUseComma(false);
-      expect(storage.getBankUseComma(), isFalse);
-      expect(storage.formatAmountForBank(3261.96), "3261.96");
-      expect(storage.formatAmountForBank(10004.5), "10004.50");
-    });
+        expect(storage.formatAmountForBank(3261.96), "3261,96");
+        expect(storage.formatAmountForBank(10004.5), "10004,50");
+        expect(storage.formatAmountForBank(0.0), "0,00");
+      },
+    );
   });
 
   group('ApiService Future Rate Resolution Rules', () {
-    test('Tuesday night keeps Tuesday rate when Wednesday rate is published', () {
-      final res = ApiService.resolveBcvRates(
-        ahora: DateTime(2026, 11, 10, 20, 5), // Martes
-        fechaBCV: DateTime(2026, 11, 11), // Miércoles
-        fechaTexto: "Miércoles, 11 Noviembre 2026",
-        usdWeb: 901.62,
-        eurWeb: 1007.96,
-        tasaHoyDolar: 898.00,
-        tasaHoyEuro: 1002.00,
-        backupDolar: 898.00,
-        backupEuro: 1002.00,
-      );
+    test(
+      'Tuesday night keeps Tuesday rate when Wednesday rate is published',
+      () {
+        final res = ApiService.resolveBcvRates(
+          ahora: DateTime(2026, 11, 10, 20, 5), // Martes
+          fechaBCV: DateTime(2026, 11, 11), // Miércoles
+          fechaTexto: "Miércoles, 11 Noviembre 2026",
+          usdWeb: 901.62,
+          eurWeb: 1007.96,
+          tasaHoyDolar: 898.00,
+          tasaHoyEuro: 1002.00,
+          backupDolar: 898.00,
+          backupEuro: 1002.00,
+        );
 
-      expect(res.bcvDolar, 898.00);
-      expect(res.bcvEuro, 1002.00);
-      expect(res.esTasaFutura, isTrue);
-      expect(res.guardarBcvEnHistorial, isFalse);
-      expect(res.futureTasaInfo, contains("901.62"));
-    });
+        expect(res.bcvDolar, 898.00);
+        expect(res.bcvEuro, 1002.00);
+        expect(res.esTasaFutura, isTrue);
+        expect(res.guardarBcvEnHistorial, isFalse);
+        expect(res.futureTasaInfo, contains("901.62"));
+      },
+    );
 
-    test('Thursday night keeps Thursday rate when Friday rate is published', () {
-      final res = ApiService.resolveBcvRates(
-        ahora: DateTime(2026, 11, 12, 18, 0), // Jueves
-        fechaBCV: DateTime(2026, 11, 13), // Viernes
-        fechaTexto: "Viernes, 13 Noviembre 2026",
-        usdWeb: 905.00,
-        eurWeb: 1012.00,
-        tasaHoyDolar: 901.62,
-        tasaHoyEuro: 1007.96,
-        backupDolar: 901.62,
-        backupEuro: 1007.96,
-      );
+    test(
+      'Thursday night keeps Thursday rate when Friday rate is published',
+      () {
+        final res = ApiService.resolveBcvRates(
+          ahora: DateTime(2026, 11, 12, 18, 0), // Jueves
+          fechaBCV: DateTime(2026, 11, 13), // Viernes
+          fechaTexto: "Viernes, 13 Noviembre 2026",
+          usdWeb: 905.00,
+          eurWeb: 1012.00,
+          tasaHoyDolar: 901.62,
+          tasaHoyEuro: 1007.96,
+          backupDolar: 901.62,
+          backupEuro: 1007.96,
+        );
 
-      expect(res.bcvDolar, 901.62);
-      expect(res.bcvEuro, 1007.96);
-      expect(res.esTasaFutura, isTrue);
-      expect(res.guardarBcvEnHistorial, isFalse);
-    });
+        expect(res.bcvDolar, 901.62);
+        expect(res.bcvEuro, 1007.96);
+        expect(res.esTasaFutura, isTrue);
+        expect(res.guardarBcvEnHistorial, isFalse);
+      },
+    );
 
     test('Friday afternoon APPLIES Monday rate immediately', () {
       final res = ApiService.resolveBcvRates(
@@ -170,4 +171,3 @@ void main() {
     });
   });
 }
-

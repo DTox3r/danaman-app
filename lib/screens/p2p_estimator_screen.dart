@@ -100,16 +100,12 @@ class P2pEstimatorScreen extends StatefulWidget {
   final StorageService storage;
   final VoidCallback onThemeToggle;
   final List<String> historial;
-  final bool bankUseComma;
-  final VoidCallback? onBankFormatToggle;
 
   const P2pEstimatorScreen({
     super.key,
     required this.storage,
     required this.onThemeToggle,
     this.historial = const [],
-    this.bankUseComma = true,
-    this.onBankFormatToggle,
   });
 
   @override
@@ -617,7 +613,6 @@ class _P2pEstimatorScreenState extends State<P2pEstimatorScreen> {
 
     final String montoBanco = widget.storage.formatAmountForBank(
       resultado.totalBs,
-      useComma: widget.bankUseComma,
     );
     final bool tieneBs = resultado.totalBs > 0;
 
@@ -728,23 +723,6 @@ class _P2pEstimatorScreenState extends State<P2pEstimatorScreen> {
                   ),
               ],
             ],
-          ),
-          const SizedBox(height: 6),
-          ActionChip(
-            avatar: const Icon(Icons.tune, size: 14),
-            label: Text(
-              widget.bankUseComma
-                  ? "Formato banco: Coma (1234,56)"
-                  : "Formato banco: Punto (1234.56)",
-              style: const TextStyle(fontSize: 11),
-            ),
-            visualDensity: VisualDensity.compact,
-            onPressed: widget.onBankFormatToggle == null
-                ? null
-                : () {
-                    HapticFeedback.selectionClick();
-                    widget.onBankFormatToggle!();
-                  },
           ),
         ],
       ),
