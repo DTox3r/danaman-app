@@ -136,17 +136,38 @@ class ApiService {
       );
     }
 
-    final double dolarVigente = tasaHoyDolar > 0
-        ? tasaHoyDolar
-        : (backupDolar > 0 ? backupDolar : usdWeb);
-    final double euroVigente = tasaHoyEuro > 0
-        ? tasaHoyEuro
-        : (backupEuro > 0 ? backupEuro : eurWeb);
+    // Para lunes a jueves cuando se publica la tasa de mañana:
+    // La tasa activa NUNCA debe ser la tasa futura usdWeb/eurWeb.
+    // Descartamos cualquier valor que sea idéntico a la tasa futura por contaminación previa.
+    final double safeTasaHoyDolar =
+        (tasaHoyDolar > 0 && (tasaHoyDolar - usdWeb).abs() > 0.001)
+            ? tasaHoyDolar
+            : 0.0;
+    final double safeTasaHoyEuro =
+        (tasaHoyEuro > 0 && (tasaHoyEuro - eurWeb).abs() > 0.001)
+            ? tasaHoyEuro
+            : 0.0;
+
+    final double safeBackupDolar =
+        (backupDolar > 0 && (backupDolar - usdWeb).abs() > 0.001)
+            ? backupDolar
+            : 0.0;
+    final double safeBackupEuro =
+        (backupEuro > 0 && (backupEuro - eurWeb).abs() > 0.001)
+            ? backupEuro
+            : 0.0;
+
+    final double dolarVigente = safeTasaHoyDolar > 0
+        ? safeTasaHoyDolar
+        : (safeBackupDolar > 0 ? safeBackupDolar : usdWeb);
+    final double euroVigente = safeTasaHoyEuro > 0
+        ? safeTasaHoyEuro
+        : (safeBackupEuro > 0 ? safeBackupEuro : eurWeb);
 
     final String hoyStr = DateFormat('dd/MM/yyyy').format(ahora);
     final bool hayVigente =
-        (tasaHoyDolar > 0 && tasaHoyEuro > 0) ||
-        (backupDolar > 0 && backupEuro > 0);
+        (safeTasaHoyDolar > 0 && safeTasaHoyEuro > 0) ||
+        (safeBackupDolar > 0 && safeBackupEuro > 0);
 
     return BcvResolution(
       bcvDolar: dolarVigente,
@@ -234,7 +255,21 @@ class ApiService {
 
             if (usdWeb != null && eurWeb != null && usdWeb > 20.0) {
               DateTime? fechaBCV = _parseBCVDate(fechaT);
+              final DateTime hoy = DateTime(ahora.year, ahora.month, ahora.day);
+              final bool esTasaFuturaReal =
+                  fechaBCV != null && fechaBCV.isAfter(hoy);
+              final bool esViernes = ahora.weekday == DateTime.friday;
+              final bool esProxSemana =
+                  fechaBCV != null &&
+                  (fechaBCV.weekday == DateTime.monday ||
+                      fechaBCV.weekday == DateTime.tuesday);
+              final int diffDias =
+                  fechaBCV != null ? fechaBCV.difference(hoy).inDays : 0;
+              final bool aplicarAnticipada =
+                  esViernes && esProxSemana && diffDias >= 1 && diffDias <= 4;
+
               if (fechaBCV != null) {
+                // Guarda la tasa bajo su fecha valor oficial publicada
                 await storage.guardarTasaPorFecha(
                   DateFormat('dd/MM/yyyy').format(fechaBCV),
                   usdWeb,
@@ -242,15 +277,60 @@ class ApiService {
                 );
               }
 
+              if (!esTasaFuturaReal) {
+                // Si la tasa publicada corresponde al día de hoy, se asegura en caché de hoy
+                await storage.guardarTasaPorFecha(hoyStr, usdWeb, eurWeb);
+              }
+
+              // Si es tasa futura y NO se debe aplicar de inmediato (Lun-Jue tarde):
+              if (esTasaFuturaReal && !aplicarAnticipada) {
+                // Purgamos del historial cualquier registro que haya guardado la tasa futura hoy por error
+                hist = await storage.purgarTasasContaminadas(
+                  usdFuturo: usdWeb,
+                  eurFuturo: eurWeb,
+                  fechaHoy: hoyStr,
+                );
+
+                // Recalculamos tasas vigentes excluyendo la tasa futura
+                savedDolar = storage.buscarUltimoValido(
+                  "BCV Dolar",
+                  hoyStr,
+                  hist,
+                  tasaAExcluir: usdWeb,
+                );
+                savedEuro = storage.buscarUltimoValido(
+                  "BCV Euro",
+                  hoyStr,
+                  hist,
+                  tasaAExcluir: eurWeb,
+                );
+
+                tasaHoyDolar = storage.getTasaGuardadaPorFecha('USD', hoyStr);
+                if (tasaHoyDolar <= 0 ||
+                    (tasaHoyDolar - usdWeb).abs() < 0.001) {
+                  tasaHoyDolar = savedDolar;
+                }
+
+                tasaHoyEuro = storage.getTasaGuardadaPorFecha('EUR', hoyStr);
+                if (tasaHoyEuro <= 0 ||
+                    (tasaHoyEuro - eurWeb).abs() < 0.001) {
+                  tasaHoyEuro = savedEuro;
+                }
+              }
+
               final double backupDolar = storage.buscarUltimoValido(
                 "BCV Dolar",
                 "",
                 hist,
+                tasaAExcluir:
+                    (esTasaFuturaReal && !aplicarAnticipada) ? usdWeb : 0.0,
               );
               final double backupEuro = storage.buscarUltimoValido(
                 "BCV Euro",
                 "",
                 hist,
+                tasaAExcluir:
+                    (esTasaFuturaReal && !aplicarAnticipada) ? eurWeb : 0.0,
               );
 
               final resolution = resolveBcvRates(

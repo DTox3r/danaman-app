@@ -71,23 +71,62 @@ class StorageService {
   double buscarUltimoValido(
     String prefijo,
     String fecha,
-    List<String> historial,
-  ) {
+    List<String> historial, {
+    double tasaAExcluir = 0.0,
+  }) {
     try {
       final prefijoLower = prefijo.toLowerCase().trim();
-      if (fecha.isNotEmpty) {
-        String registro = historial.firstWhere(
-          (e) => e.toLowerCase().startsWith(prefijoLower) && e.contains(fecha),
-        );
-        return double.parse(registro.split('|')[1]);
+      for (final e in historial) {
+        if (e.toLowerCase().startsWith(prefijoLower)) {
+          if (fecha.isNotEmpty && !e.contains(fecha)) continue;
+          final parts = e.split('|');
+          if (parts.length >= 2) {
+            final val = double.tryParse(parts[1]) ?? 0.0;
+            if (val > 0 &&
+                (tasaAExcluir <= 0 || (val - tasaAExcluir).abs() > 0.001)) {
+              return val;
+            }
+          }
+        }
       }
-      String registroGenerico = historial.firstWhere(
-        (e) => e.toLowerCase().startsWith(prefijoLower),
-      );
-      return double.parse(registroGenerico.split('|')[1]);
+      return 0.0;
     } catch (e) {
       return 0.0;
     }
+  }
+
+  /// Elimina registros del historial que hayan guardado erróneamente la tasa futura
+  /// como si fuera la tasa del día de hoy.
+  Future<List<String>> purgarTasasContaminadas({
+    required double usdFuturo,
+    required double eurFuturo,
+    required String fechaHoy,
+  }) async {
+    List<String> localHistorial = getHistorial();
+    bool cambio = false;
+
+    localHistorial.removeWhere((e) {
+      final eLower = e.toLowerCase();
+      if (!e.contains(fechaHoy)) return false;
+      final parts = e.split('|');
+      if (parts.length < 2) return false;
+      final val = double.tryParse(parts[1]) ?? 0.0;
+
+      if (eLower.startsWith("bcv dolar") && (val - usdFuturo).abs() < 0.001) {
+        cambio = true;
+        return true;
+      }
+      if (eLower.startsWith("bcv euro") && (val - eurFuturo).abs() < 0.001) {
+        cambio = true;
+        return true;
+      }
+      return false;
+    });
+
+    if (cambio) {
+      await updateHistorial(localHistorial);
+    }
+    return localHistorial;
   }
 
   Future<List<String>> mergeHistorial(List<String> importados) async {

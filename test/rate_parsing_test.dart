@@ -54,6 +54,67 @@ void main() {
     });
 
     test(
+      'buscarUltimoValido with tasaAExcluir ignores polluted future rate in history',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final storage = StorageService(prefs);
+
+        List<String> hist = [
+          "BCV Dolar|911.62|12/11/2026|04:15:00 PM",
+          "BCV Dolar|904.45|12/11/2026|10:00:00 AM",
+          "BCV Euro|1009.34|12/11/2026|04:15:00 PM",
+          "BCV Euro|1003.49|12/11/2026|10:00:00 AM",
+        ];
+
+        // Con tasaAExcluir = 911.62, debe ignorar la primera y devolver 904.45
+        expect(
+          storage.buscarUltimoValido(
+            "BCV Dolar",
+            "12/11/2026",
+            hist,
+            tasaAExcluir: 911.62,
+          ),
+          904.45,
+        );
+        expect(
+          storage.buscarUltimoValido(
+            "BCV Euro",
+            "12/11/2026",
+            hist,
+            tasaAExcluir: 1009.34,
+          ),
+          1003.49,
+        );
+      },
+    );
+
+    test('purgarTasasContaminadas removes today records matching future rate',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'historial_v4_2_5': [
+          "BCV Dolar|911.62|12/11/2026|04:15:00 PM",
+          "BCV Euro|1009.34|12/11/2026|04:15:00 PM",
+          "Binance Compra|1067.00|12/11/2026|04:15:00 PM",
+          "BCV Dolar|904.45|11/11/2026|04:00:00 PM",
+        ]
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final storage = StorageService(prefs);
+
+      final limpio = await storage.purgarTasasContaminadas(
+        usdFuturo: 911.62,
+        eurFuturo: 1009.34,
+        fechaHoy: "12/11/2026",
+      );
+
+      expect(limpio.any((e) => e.contains("911.62")), isFalse);
+      expect(limpio.any((e) => e.contains("1009.34")), isFalse);
+      expect(limpio.any((e) => e.contains("1067.00")), isTrue);
+      expect(limpio.any((e) => e.contains("904.45")), isTrue);
+    });
+
+    test(
       'formatAmountForBank formats cleanly with comma decimal and without thousands separator',
       () async {
         SharedPreferences.setMockInitialValues({});
@@ -92,24 +153,25 @@ void main() {
     );
 
     test(
-      'Thursday night keeps Thursday rate when Friday rate is published',
+      'Thursday night discards polluted tasaHoy matching future rate and falls back to clean backup',
       () {
         final res = ApiService.resolveBcvRates(
-          ahora: DateTime(2026, 11, 12, 18, 0), // Jueves
+          ahora: DateTime(2026, 11, 12, 16, 46), // Jueves
           fechaBCV: DateTime(2026, 11, 13), // Viernes
           fechaTexto: "Viernes, 13 Noviembre 2026",
-          usdWeb: 905.00,
-          eurWeb: 1012.00,
-          tasaHoyDolar: 901.62,
-          tasaHoyEuro: 1007.96,
-          backupDolar: 901.62,
-          backupEuro: 1007.96,
+          usdWeb: 911.62,
+          eurWeb: 1009.34,
+          tasaHoyDolar: 911.62, // Contaminada con la tasa futura
+          tasaHoyEuro: 1009.34, // Contaminada con la tasa futura
+          backupDolar: 904.45, // Tasa limpia anterior
+          backupEuro: 1003.49, // Tasa limpia anterior
         );
 
-        expect(res.bcvDolar, 901.62);
-        expect(res.bcvEuro, 1007.96);
+        expect(res.bcvDolar, 904.45);
+        expect(res.bcvEuro, 1003.49);
         expect(res.esTasaFutura, isTrue);
         expect(res.guardarBcvEnHistorial, isFalse);
+        expect(res.futureTasaInfo, contains("911.62"));
       },
     );
 
